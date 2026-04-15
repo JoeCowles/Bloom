@@ -1,0 +1,34 @@
+{
+  "manifest_version": 3,
+  "name": "Bloom",
+  "description": "Open-source screen recorder with a draggable camera bubble.",
+  "version": "0.1.0",
+  "permissions": [
+    "activeTab",
+    "downloads",
+    "storage",
+    "tabCapture",
+    "scripting"
+  ],
+  "background": {
+    "service_worker": "background.js",
+    "type": "module"
+  },
+  "action": {
+    "default_title": "Bloom"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "recorder.html",
+        "recorder.js",
+        "floating.html",
+        "floating.css",
+        "floating.js"
+      ],
+      "matches": [
+        "<all_urls>"
+      ]
+    }
+  ]
+}

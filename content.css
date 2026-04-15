@@ -1,0 +1,73 @@
+#bloom-floating-ui-wrapper {
+  position: fixed;
+  bottom: 24px;
+  left: 24px;
+  width: 264px;   /* 240 + 24 padding; JS will update */
+  height: 436px;  /* 240 bubble + 160 controls/selectors + 36 resize bar */
+  z-index: 2147483647;
+  overflow: visible;
+  pointer-events: auto;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+#bloom-floating-ui {
+  width: 100%;
+  height: 400px;  /* JS sets this to bubbleSize + 160 */
+  border: none;
+  background: transparent;
+  display: block;
+  flex-shrink: 0;
+}
+
+/* ── Resize Slider Bar ─────────────────────────────── */
+#bloom-resize-bar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 4px 12px;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#bloom-resize-label {
+  font-size: 9px;
+  color: rgba(255,255,255,0.6);
+  flex-shrink: 0;
+  user-select: none;
+  line-height: 1;
+}
+
+#bloom-resize-slider {
+  flex: 1;
+  -webkit-appearance: none;
+  appearance: none;
+  height: 4px;
+  background: rgba(255,255,255,0.2);
+  border-radius: 99px;
+  outline: none;
+  cursor: ew-resize;
+  transition: background 0.2s;
+}
+
+#bloom-resize-slider:hover {
+  background: rgba(255,255,255,0.35);
+}
+
+#bloom-resize-slider::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: white;
+  box-shadow: 0 2px 8px rgba(0,0,0,0.5);
+  cursor: ew-resize;
+  transition: transform 0.15s;
+}
+
+#bloom-resize-slider::-webkit-slider-thumb:hover {
+  transform: scale(1.2);
+}
