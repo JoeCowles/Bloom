@@ -22,52 +22,22 @@
   flex-shrink: 0;
 }
 
-/* ── Resize Slider Bar ─────────────────────────────── */
-#bloom-resize-bar {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 4px 12px;
-  width: 100%;
-  box-sizing: border-box;
-}
-
-#bloom-resize-label {
-  font-size: 9px;
-  color: rgba(255,255,255,0.6);
-  flex-shrink: 0;
-  user-select: none;
-  line-height: 1;
-}
-
-#bloom-resize-slider {
-  flex: 1;
-  -webkit-appearance: none;
-  appearance: none;
-  height: 4px;
-  background: rgba(255,255,255,0.2);
-  border-radius: 99px;
-  outline: none;
-  cursor: ew-resize;
-  transition: background 0.2s;
-}
-
-#bloom-resize-slider:hover {
-  background: rgba(255,255,255,0.35);
-}
-
-#bloom-resize-slider::-webkit-slider-thumb {
-  -webkit-appearance: none;
-  appearance: none;
-  width: 14px;
-  height: 14px;
-  border-radius: 50%;
+/* ── Corner Resize Handle ─────────────────────────────── */
+#bloom-resize-handle {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  bottom: 160px; /* offset by controls height, adjust dynamically in JS if needed */
+  right: 18px; /* inset slightly */
   background: white;
+  border-radius: 50%;
   box-shadow: 0 2px 8px rgba(0,0,0,0.5);
-  cursor: ew-resize;
+  cursor: nwse-resize;
+  z-index: 10;
+  pointer-events: auto;
   transition: transform 0.15s;
 }
 
-#bloom-resize-slider::-webkit-slider-thumb:hover {
+#bloom-resize-handle:hover {
   transform: scale(1.2);
 }

@@ -1,26 +1,33 @@
-chrome.action.onClicked.addListener(async (tab) => {
-  if (!tab || !tab.id) return;
+let isFloatActive = false;
+let floatState = null;
+
+async function injectFloatingUI(tabId) {
+  if (!isFloatActive || !tabId) return;
 
   try {
     await chrome.scripting.insertCSS({
-      target: { tabId: tab.id },
+      target: { tabId },
       files: ["content.css"]
     });
   } catch (err) {
-    // Ignore if already injected or fails
+    // Ignore if already injected or fails (e.g., restricted page)
   }
 
   try {
     await chrome.scripting.executeScript({
-      target: { tabId: tab.id },
+      target: { tabId },
       files: ["content.js"]
     });
   } catch (err) {
-    console.error("Failed to inject script", err);
-    // User clicked on a restricted page (like chrome://extensions or new tab)
-    chrome.tabs.create({ url: 'data:text/html,<h1>Bloom Recorder</h1><p>Cannot record on this specific page (e.g. new tab or chrome settings). Please navigate to a standard webpage (like google.com) and click the extension icon again.</p>' });
-    return;
+    console.warn("Failed to inject script into tab", tabId, err);
   }
+}
+
+chrome.action.onClicked.addListener(async (tab) => {
+  if (!tab || !tab.id) return;
+
+  isFloatActive = true;
+  await injectFloatingUI(tab.id);
 
   const params = new URLSearchParams({
     mode: "tab",
@@ -34,4 +41,29 @@ chrome.action.onClicked.addListener(async (tab) => {
       active: false
     }
   );
+});
+
+chrome.tabs.onActivated.addListener((activeInfo) => {
+  if (isFloatActive) {
+    injectFloatingUI(activeInfo.tabId);
+  }
+});
+
+chrome.tabs.onUpdated.addListener((tabId, changeInfo, tab) => {
+  if (isFloatActive && changeInfo.status === 'complete') {
+    injectFloatingUI(tabId);
+  }
+});
+
+chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
+  if (message.type === "BLOOM_SAVE_STATE") {
+    floatState = message.state;
+  } else if (message.type === "BLOOM_GET_STATE") {
+    sendResponse(floatState);
+  } else if (message.type === "BLOOM_HUD_CLOSED" || message.type === "BLOOM_DONE") {
+    isFloatActive = false;
+    floatState = null;
+  }
+  // Optional but recommended for get_state if we do async
+  return false; 
 });

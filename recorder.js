@@ -50,7 +50,10 @@ async function beginRecording({ audioDeviceId } = {}) {
     state.composedStream = new MediaStream([...videoTracks, ...audioTracks]);
 
     state.recordedChunks = [];
-    state.recorder = new MediaRecorder(state.composedStream, { videoBitsPerSecond: 6_000_000 });
+    state.recorder = new MediaRecorder(state.composedStream, {
+      mimeType: "video/mp4",
+      videoBitsPerSecond: 6_000_000
+    });
     state.recorder.addEventListener("dataavailable", (event) => {
       if (event.data.size > 0) state.recordedChunks.push(event.data);
     });
@@ -84,7 +87,10 @@ async function restartRecording({ audioDeviceId } = {}) {
     const videoTracks = state.displayStream.getVideoTracks();
     const audioTracks = state.mixedAudioStream?.getAudioTracks() ?? [];
     state.composedStream = new MediaStream([...videoTracks, ...audioTracks]);
-    state.recorder = new MediaRecorder(state.composedStream, { videoBitsPerSecond: 6_000_000 });
+    state.recorder = new MediaRecorder(state.composedStream, {
+      mimeType: "video/mp4",
+      videoBitsPerSecond: 6_000_000
+    });
     state.recorder.addEventListener("dataavailable", (event) => {
       if (event.data.size > 0) state.recordedChunks.push(event.data);
     });
@@ -109,7 +115,7 @@ async function stopRecording() {
       console.log("[Bloom] recorder 'stop' event fired.");
       state.recording = false;
 
-      const mimeType = state.recorder.mimeType || "video/webm";
+      const mimeType = state.recorder.mimeType || "video/mp4";
       console.log("[Bloom] building blob — chunks:", state.recordedChunks.length, "mimeType:", mimeType);
       const blob = new Blob(state.recordedChunks, { type: mimeType });
       const url = URL.createObjectURL(blob);
@@ -130,7 +136,7 @@ async function stopRecording() {
       try {
         downloadId = await new Promise((res, rej) => {
           chrome.downloads.download(
-            { url, filename: `bloom-recording-${Date.now()}.webm`, saveAs: true },
+            { url, filename: `bloom-recording-${Date.now()}.mp4`, saveAs: true },
             (id) => {
               if (chrome.runtime.lastError) {
                 console.error("[Bloom] download callback error:", chrome.runtime.lastError.message);

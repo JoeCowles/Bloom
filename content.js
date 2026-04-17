@@ -10,39 +10,69 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
   iframe.allow = "camera; microphone; display-capture";
   wrapper.appendChild(iframe);
 
-  // ── Resize Slider (lives in parent page, not iframe) ──────────────────────
-  const resizeBar = document.createElement("div");
-  resizeBar.id = "bloom-resize-bar";
-  resizeBar.innerHTML = `
-    <span id="bloom-resize-label">⬤</span>
-    <input id="bloom-resize-slider" type="range" min="100" max="500" value="240" step="4" />
-  `;
-  wrapper.appendChild(resizeBar);
+  // ── Resize Handle ──────────────────────────────────────────────────────────
+  const resizeHandle = document.createElement("div");
+  resizeHandle.id = "bloom-resize-handle";
+  wrapper.appendChild(resizeHandle);
 
   document.body.appendChild(wrapper);
 
-  // ── Resize logic ───────────────────────────────────────────────────────────
-  const slider = wrapper.querySelector("#bloom-resize-slider");
+  // ── State & Resizing logic ─────────────────────────────────────────────────
+  let currentSize = 240;
 
   function applySize(size) {
-    wrapper.style.width  = `${size + 24}px`;
-    // iframe height = bubble + device selectors (96px) + controls (60px) + padding
-    iframe.style.height  = `${size + 160}px`;
-    wrapper.style.height = `${size + 160 + 36}px`; // +36 for resize bar
-    iframe.contentWindow?.postMessage({ type: "BLOOM_RESIZE_UPDATE", size }, "*");
+    currentSize = Math.max(100, Math.min(600, size));
+    wrapper.style.width  = `${currentSize + 24}px`;
+    iframe.style.height  = `${currentSize + 160}px`;
+    wrapper.style.height = `${currentSize + 160}px`;
+    iframe.contentWindow?.postMessage({ type: "BLOOM_RESIZE_UPDATE", size: currentSize }, "*");
+    
+    // Position handle at bottom right of the circular bubble
+    resizeHandle.style.bottom = `160px`;
   }
 
-  slider.addEventListener("input", () => applySize(Number(slider.value)));
+  // Restore State
+  chrome.runtime.sendMessage({ type: "BLOOM_GET_STATE" }, (state) => {
+    if (state) {
+      applySize(state.size || 240);
+      if (typeof state.left === 'number') wrapper.style.left = `${state.left}px`;
+      if (typeof state.top === 'number') {
+        wrapper.style.top = `${state.top}px`;
+        wrapper.style.bottom = "auto";
+      }
+    } else {
+      applySize(240);
+    }
+  });
 
-  // Set initial size
-  applySize(240);
+  // Helper to save state
+  function saveState() {
+    const rect = wrapper.getBoundingClientRect();
+    chrome.runtime.sendMessage({
+      type: "BLOOM_SAVE_STATE",
+      state: { left: rect.left, top: rect.top, size: currentSize }
+    });
+  }
 
-  // ── Drag logic (fully parent-side) ────────────────────────────────────────
+  // ── Drag & Resize Interaction ──────────────────────────────────────────────
   let dragging = false;
+  let resizing = false;
   let dragStartMouseX = 0;
   let dragStartMouseY = 0;
   let dragStartLeft = 0;
   let dragStartTop = 0;
+  let dragStartSize = 0;
+
+  resizeHandle.addEventListener("mousedown", (e) => {
+    resizing = true;
+    dragStartMouseX = e.clientX;
+    dragStartMouseY = e.clientY;
+    dragStartSize = currentSize;
+    wrapper.style.pointerEvents = "none";
+    document.body.style.userSelect = "none";
+    e.preventDefault();
+    e.stopPropagation();
+  });
 
   // iframe signals drag start; parent takes over from here
   window.addEventListener("message", (event) => {
@@ -62,32 +92,39 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
       document.body.style.userSelect = "none";
 
     } else if (type === "BLOOM_CLOSE") {
+      chrome.runtime.sendMessage({ type: "BLOOM_HUD_CLOSED" });
       wrapper.remove();
     }
   });
 
   document.addEventListener("mousemove", (e) => {
-    if (!dragging) return;
+    if (resizing) {
+      // Calculate delta diagonally, but prefer X distance for smooth width scaling
+      const deltaX = e.clientX - dragStartMouseX;
+      applySize(dragStartSize + deltaX);
+    } else if (dragging) {
+      let newLeft = dragStartLeft + (e.clientX - dragStartMouseX);
+      let newTop  = dragStartTop  + (e.clientY - dragStartMouseY);
 
-    let newLeft = dragStartLeft + (e.clientX - dragStartMouseX);
-    let newTop  = dragStartTop  + (e.clientY - dragStartMouseY);
+      // Clamp to viewport
+      const rect = wrapper.getBoundingClientRect();
+      newLeft = Math.max(0, Math.min(window.innerWidth  - rect.width,  newLeft));
+      newTop  = Math.max(0, Math.min(window.innerHeight - rect.height, newTop));
 
-    // Clamp to viewport
-    const rect = wrapper.getBoundingClientRect();
-    newLeft = Math.max(0, Math.min(window.innerWidth  - rect.width,  newLeft));
-    newTop  = Math.max(0, Math.min(window.innerHeight - rect.height, newTop));
-
-    wrapper.style.left   = `${newLeft}px`;
-    wrapper.style.top    = `${newTop}px`;
-    wrapper.style.bottom = "auto";
-    wrapper.style.right  = "auto";
+      wrapper.style.left   = `${newLeft}px`;
+      wrapper.style.top    = `${newTop}px`;
+      wrapper.style.bottom = "auto";
+      wrapper.style.right  = "auto";
+    }
   });
 
   document.addEventListener("mouseup", () => {
-    if (dragging) {
+    if (resizing || dragging) {
+      resizing = false;
       dragging = false;
       wrapper.style.pointerEvents = "auto";
       document.body.style.userSelect = "";
+      saveState();
     }
   });
 }
