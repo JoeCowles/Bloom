@@ -28,6 +28,7 @@ chrome.action.onClicked.addListener(async (tab) => {
 
   isFloatActive = true;
   sourceTabId   = tab.id;
+  activeTabId   = tab.id;   // ← track the launch tab immediately
   await injectFloatingUI(tab.id);
 
   const params = new URLSearchParams({
@@ -79,19 +80,31 @@ chrome.tabs.onUpdated.addListener(async (tabId, changeInfo) => {
   await injectFloatingUI(tabId);
 });
 
-// ── State messages ─────────────────────────────────────────────────────────────
+// ── State messages & recorder relay ───────────────────────────────────────────
 chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   if (message.type === "BLOOM_SAVE_STATE") {
     floatState = message.state;
 
   } else if (message.type === "BLOOM_GET_STATE") {
     sendResponse(floatState);
-    return true; // keep channel open for async sendResponse
+    return true;
 
   } else if (message.type === "BLOOM_HUD_CLOSED") {
     isFloatActive = false;
     floatState    = null;
     sourceTabId   = null;
     activeTabId   = null;
+
+  // ── Relay recorder events to the content script in the active tab ──────────
+  // recorder.js lives in its own extension page (recorder.html tab) and can't
+  // directly message a content script.  The background acts as the relay.
+  } else if (
+    message.type === "BLOOM_DONE" ||
+    message.type === "BLOOM_RECORDING_RESTARTED"
+  ) {
+    if (activeTabId) {
+      chrome.tabs.sendMessage(activeTabId, { type: message.type }).catch(() => {});
+    }
   }
 });
+
