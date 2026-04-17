@@ -10,6 +10,11 @@
       <video id="camera-feed" autoplay playsinline muted></video>
       <div id="countdown" class="countdown hidden">3</div>
     </div>
+    <!-- Four invisible corner resize zones -->
+    <div class="resize-corner" data-sx="-1" data-sy="-1" style="top:0;left:0;cursor:nwse-resize;"></div>
+    <div class="resize-corner" data-sx="1"  data-sy="-1" style="top:0;right:0;cursor:nesw-resize;"></div>
+    <div class="resize-corner" data-sx="-1" data-sy="1"  style="bottom:0;left:0;cursor:nesw-resize;"></div>
+    <div class="resize-corner" data-sx="1"  data-sy="1"  style="bottom:0;right:0;cursor:nwse-resize;"></div>
   </div>
 
   <div class="device-selectors" id="device-selectors">
@@ -24,6 +29,7 @@
   </div>
 
   <div class="controls-container">
+    <button id="close-btn" class="ghost close-btn" title="Close">✕</button>
     <button id="start-btn" class="primary">▶ Start</button>
     <button id="restart-btn" class="ghost hidden">↺ Restart</button>
     <button id="stop-btn" class="danger hidden">■ Stop</button>

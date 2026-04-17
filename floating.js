@@ -1,9 +1,11 @@
 const cameraFeed      = document.getElementById("camera-feed");
 const cameraContainer = document.getElementById("camera-container");
+const resizeCorners   = document.querySelectorAll(".resize-corner");
 const countdownEl     = document.getElementById("countdown");
 const startBtn        = document.getElementById("start-btn");
 const stopBtn         = document.getElementById("stop-btn");
 const restartBtn      = document.getElementById("restart-btn");
+const closeBtn        = document.getElementById("close-btn");
 const videoSelect     = document.getElementById("video-select");
 const audioSelect     = document.getElementById("audio-select");
 const deviceSelectors = document.getElementById("device-selectors");
@@ -62,8 +64,12 @@ videoSelect.addEventListener("change", startCamera);
 enumerateDevices().then(() => startCamera());
 
 // ── Drag signal to parent ─────────────────────────────────────────────────────
+// The resize corner captures mousedown first (higher z-index), so any mousedown
+// on the rest of the bubble is a drag.
 
 cameraContainer.addEventListener("mousedown", (e) => {
+  // Don't start drag if a resize corner was clicked
+  if (e.target.classList.contains("resize-corner")) return;
   window.parent.postMessage({
     type: "BLOOM_DRAG_START",
     clientX: e.clientX,
@@ -72,8 +78,27 @@ cameraContainer.addEventListener("mousedown", (e) => {
   e.preventDefault();
 });
 
-// ── Resize signal from parent ─────────────────────────────────────────────────
+// ── Resize signal to parent ───────────────────────────────────────────────────
+// Each corner carries data-sx / data-sy (+1 or -1) to tell the parent which
+// direction the drag should grow the bubble.
+resizeCorners.forEach((corner) => {
+  corner.addEventListener("mousedown", (e) => {
+    const sx = Number(corner.dataset.sx);
+    const sy = Number(corner.dataset.sy);
+    window.parent.postMessage({
+      type: "BLOOM_RESIZE_START",
+      clientX: e.clientX,
+      clientY: e.clientY,
+      sx,
+      sy
+    }, "*");
+    e.preventDefault();
+    e.stopPropagation();
+  });
+});
 
+
+// ── Incoming messages from parent ─────────────────────────────────────────────
 window.addEventListener("message", (e) => {
   if (e.data?.type === "BLOOM_RESIZE_UPDATE") {
     document.documentElement.style.setProperty("--bubble-size", `${e.data.size}px`);
@@ -81,14 +106,11 @@ window.addEventListener("message", (e) => {
 });
 
 // ── Runtime messages from recorder.js ────────────────────────────────────────
-
 chrome.runtime.onMessage.addListener((message) => {
   if (message.type === "BLOOM_DONE") {
-    // Recording saved — stop camera and remove ourselves from the page
     stopCamera();
     window.parent.postMessage({ type: "BLOOM_CLOSE" }, "*");
   } else if (message.type === "BLOOM_RECORDING_RESTARTED") {
-    // New recording is live — re-enable Stop and Restart
     stopBtn.disabled = false;
     stopBtn.textContent = "■ Stop";
     restartBtn.disabled = false;
@@ -99,6 +121,7 @@ chrome.runtime.onMessage.addListener((message) => {
 
 function showRecordingState() {
   startBtn.classList.add("hidden");
+  closeBtn.classList.add("hidden");
   stopBtn.classList.remove("hidden");
   restartBtn.classList.remove("hidden");
   deviceSelectors.classList.add("hidden");
@@ -106,6 +129,7 @@ function showRecordingState() {
 
 function showIdleState() {
   startBtn.classList.remove("hidden");
+  closeBtn.classList.remove("hidden");
   stopBtn.classList.add("hidden");
   restartBtn.classList.add("hidden");
   deviceSelectors.classList.remove("hidden");
@@ -129,6 +153,11 @@ function runCountdown(callback) {
   }, 1000);
 }
 
+closeBtn.addEventListener("click", () => {
+  stopCamera();
+  window.parent.postMessage({ type: "BLOOM_CLOSE" }, "*");
+});
+
 startBtn.addEventListener("click", () => {
   startBtn.disabled = true;
   runCountdown(() => {
@@ -150,9 +179,7 @@ stopBtn.addEventListener("click", () => {
 restartBtn.addEventListener("click", () => {
   restartBtn.disabled = true;
   stopBtn.disabled = true;
-  // Tell recorder to restart — it will broadcast BLOOM_RECORDING_RESTARTED when ready
   chrome.runtime.sendMessage({ type: "RESTART_RECORDING", audioDeviceId: audioSelect.value || null });
-  // Reset the UI into countdown immediately
   showIdleState();
   requestAnimationFrame(() => startBtn.click());
 });

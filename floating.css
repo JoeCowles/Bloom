@@ -51,7 +51,20 @@ body {
   width: 100%;
   height: 100%;
   object-fit: cover;
+  background: transparent;
+  display: block;
 }
+
+/* ── Resize corner hit zones (one per corner) ──── */
+.resize-corner {
+  position: absolute;
+  width: 36%;
+  height: 36%;
+  z-index: 10;
+  /* Each positioned via inline style: top/bottom + left/right */
+  /* debug: background: rgba(255,0,0,0.25); */
+}
+
 
 .countdown {
   position: absolute;
@@ -74,9 +87,6 @@ body {
   from { transform: scale(1.4); opacity: 0; }
   to   { transform: scale(1);   opacity: 1; }
 }
-
-
-
 
 /* ── Device Selectors ──────────────────────── */
 .device-selectors {
@@ -114,7 +124,6 @@ select {
   outline: none;
   backdrop-filter: blur(8px);
   transition: border-color 0.2s;
-  /* truncate long device names */
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
@@ -175,6 +184,13 @@ button:not(:disabled):active { transform: scale(0.94); }
   background: linear-gradient(135deg, #ef4444, #dc2626);
   color: #fff;
   box-shadow: 0 6px 20px rgba(239, 68, 68, 0.4);
+}
+
+/* Close button — small and square-ish */
+.close-btn {
+  padding: 8px 12px;
+  font-size: 16px;
+  line-height: 1;
 }
 
 /* ── Utilities ─────────────────────────────── */
