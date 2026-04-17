@@ -1,6 +1,6 @@
 if (!document.getElementById("bloom-floating-ui-wrapper")) {
 
-  // ── Inject UI directly into page (no iframe = truly transparent) ───────────
+  // ── Inject UI directly into page ────────────────────────────────────────────
   const wrapper = document.createElement("div");
   wrapper.id = "bloom-floating-ui-wrapper";
   wrapper.innerHTML = `
@@ -29,11 +29,12 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
       <button id="bloom-start-btn" class="bloom-primary">▶ Start</button>
       <button id="bloom-restart-btn" class="bloom-ghost bloom-hidden">↺ Restart</button>
       <button id="bloom-stop-btn" class="bloom-danger bloom-hidden">■ Stop</button>
+      <span id="bloom-error-msg" class="bloom-error-msg bloom-hidden"></span>
     </div>
   `;
   document.body.appendChild(wrapper);
 
-  // ── Element refs ──────────────────────────────────────────────────────────
+  // ── Element refs ─────────────────────────────────────────────────────────────
   const cameraContainer = wrapper.querySelector("#bloom-camera-container");
   const cameraFeed      = wrapper.querySelector("#bloom-camera-feed");
   const countdownEl     = wrapper.querySelector("#bloom-countdown");
@@ -44,21 +45,20 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
   const startBtn        = wrapper.querySelector("#bloom-start-btn");
   const stopBtn         = wrapper.querySelector("#bloom-stop-btn");
   const restartBtn      = wrapper.querySelector("#bloom-restart-btn");
+  const errorMsg        = wrapper.querySelector("#bloom-error-msg");
   const resizeCorners   = wrapper.querySelectorAll(".bloom-resize-corner");
 
-  // ── Size ──────────────────────────────────────────────────────────────────
+  // ── Size ─────────────────────────────────────────────────────────────────────
   let currentSize = 240;
 
   function applySize(size) {
     currentSize = Math.max(100, Math.min(600, size));
     wrapper.style.setProperty("--bloom-bubble-size", `${currentSize}px`);
-    // wrapper width = bubble + small horizontal padding
     wrapper.style.width = `${currentSize + 24}px`;
   }
 
-  // Restore previously saved position & size
   chrome.runtime.sendMessage({ type: "BLOOM_GET_STATE" }, (state) => {
-    if (chrome.runtime.lastError) { /* ignore */ }
+    if (chrome.runtime.lastError) {}
     if (state) {
       applySize(state.size || 240);
       if (typeof state.left === "number") {
@@ -83,12 +83,12 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
     });
   }
 
-  // ── Camera ────────────────────────────────────────────────────────────────
-  let currentStream = null;
+  // ── Camera preview ───────────────────────────────────────────────────────────
+  let cameraStream = null;
 
   async function enumerateDevices() {
     let temp;
-    try { temp = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); } catch (e) { /* ok */ }
+    try { temp = await navigator.mediaDevices.getUserMedia({ video: true, audio: true }); } catch (e) {}
     const devices = await navigator.mediaDevices.enumerateDevices();
     if (temp) temp.getTracks().forEach(t => t.stop());
 
@@ -105,44 +105,85 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
     fill(audioSelect, "audioinput", "Microphone");
   }
 
-  async function startCamera() {
-    if (currentStream) currentStream.getTracks().forEach(t => t.stop());
+  async function startCameraPreview() {
+    if (cameraStream) cameraStream.getTracks().forEach(t => t.stop());
     try {
-      currentStream = await navigator.mediaDevices.getUserMedia({
+      cameraStream = await navigator.mediaDevices.getUserMedia({
         video: videoSelect.value
           ? { deviceId: { exact: videoSelect.value }, height: { ideal: 720 } }
           : { height: { ideal: 720 } },
         audio: false
       });
-      cameraFeed.srcObject = currentStream;
+      cameraFeed.srcObject = cameraStream;
     } catch (err) {
       console.error("[Bloom] Camera denied", err);
     }
   }
 
-  function stopCamera() {
-    if (currentStream) { currentStream.getTracks().forEach(t => t.stop()); currentStream = null; }
+  function stopCameraPreview() {
+    if (cameraStream) { cameraStream.getTracks().forEach(t => t.stop()); cameraStream = null; }
     cameraFeed.srcObject = null;
   }
 
-  videoSelect.addEventListener("change", startCamera);
-  enumerateDevices().then(() => startCamera());
+  videoSelect.addEventListener("change", startCameraPreview);
+  enumerateDevices().then(() => startCameraPreview());
 
-  // ── Close ─────────────────────────────────────────────────────────────────
+  // ── Close ────────────────────────────────────────────────────────────────────
   function closeHUD() {
-    stopCamera();
+    stopCameraPreview();
+    cleanupRecording();
     chrome.runtime.sendMessage({ type: "BLOOM_HUD_CLOSED" });
     wrapper.remove();
   }
   closeBtn.addEventListener("click", closeHUD);
 
-  // ── Recording state UI ────────────────────────────────────────────────────
+  // ── Recording helpers ────────────────────────────────────────────────────────
+  function getSupportedMimeType() {
+    const candidates = [
+      "video/webm;codecs=h264,opus",
+      "video/webm;codecs=vp9,opus",
+      "video/webm;codecs=vp8,opus",
+      "video/webm"
+    ];
+    return candidates.find(t => MediaRecorder.isTypeSupported(t)) ?? "video/webm";
+  }
+
+  let mediaRecorder  = null;
+  let recordedChunks = [];
+  let screenStream   = null;
+  let micStream      = null;
+  let recordAudioCtx = null;
+  let composedStream = null;
+
+  function cleanupRecording() {
+    screenStream?.getTracks().forEach(t => t.stop());
+    micStream?.getTracks().forEach(t => t.stop());
+    composedStream?.getTracks().forEach(t => t.stop());
+    recordAudioCtx?.close();
+    screenStream   = null;
+    micStream      = null;
+    composedStream = null;
+    recordAudioCtx = null;
+    mediaRecorder  = null;
+    recordedChunks = [];
+  }
+
+  function showError(text = "⚠ Could not start recording") {
+    showIdleState();
+    errorMsg.textContent = text;
+    errorMsg.classList.remove("bloom-hidden");
+    setTimeout(() => errorMsg.classList.add("bloom-hidden"), 4000);
+  }
+
   function showRecordingState() {
     startBtn.classList.add("bloom-hidden");
     closeBtn.classList.add("bloom-hidden");
     stopBtn.classList.remove("bloom-hidden");
     restartBtn.classList.remove("bloom-hidden");
     deviceSelectors.classList.add("bloom-hidden");
+    stopBtn.disabled    = false;
+    restartBtn.disabled = false;
+    stopBtn.textContent = "■ Stop";
   }
 
   function showIdleState() {
@@ -151,7 +192,8 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
     stopBtn.classList.add("bloom-hidden");
     restartBtn.classList.add("bloom-hidden");
     deviceSelectors.classList.remove("bloom-hidden");
-    startBtn.disabled = false;
+    startBtn.disabled    = false;
+    startBtn.textContent = "▶ Start";
   }
 
   function runCountdown(callback) {
@@ -170,42 +212,146 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
     }, 1000);
   }
 
-  startBtn.addEventListener("click", () => {
-    startBtn.disabled = true;
+  function buildRecorder(stream) {
+    const mimeType = getSupportedMimeType();
+    try {
+      return new MediaRecorder(stream, { mimeType, videoBitsPerSecond: 6_000_000 });
+    } catch (e) {
+      return new MediaRecorder(stream);
+    }
+  }
+
+  function downloadBlob(blob) {
+    const url      = URL.createObjectURL(blob);
+    const a        = document.createElement("a");
+    a.href         = url;
+    a.download     = `bloom-recording-${Date.now()}.webm`;
+    a.style.display = "none";
+    document.body.appendChild(a);
+    a.click();
+    document.body.removeChild(a);
+    requestAnimationFrame(() => URL.revokeObjectURL(url));
+  }
+
+  // ── Start recording ──────────────────────────────────────────────────────────
+  // getDisplayMedia + getUserMedia MUST be called within the click handler so
+  // Chrome's user-gesture requirement is satisfied. Both are awaited BEFORE the
+  // countdown, ensuring streams are ready before recording begins.
+  startBtn.addEventListener("click", async () => {
+    startBtn.disabled    = true;
+    startBtn.textContent = "Setting up…";
+    errorMsg.classList.add("bloom-hidden");
+
+    try {
+      // 1. Screen/tab capture — Chrome shows its native share picker
+      screenStream = await navigator.mediaDevices.getDisplayMedia({
+        video: { frameRate: { ideal: 30 } },
+        audio: true   // captures tab audio when user picks a browser tab
+      });
+
+      // 2. Microphone — Chrome shows the mic permission dialog for this website
+      //    (or uses cached permission if already granted)
+      try {
+        const audioConstraint = audioSelect.value
+          ? { deviceId: { exact: audioSelect.value }, echoCancellation: true, noiseSuppression: true }
+          : { echoCancellation: true, noiseSuppression: true };
+        micStream = await navigator.mediaDevices.getUserMedia({ audio: audioConstraint });
+      } catch (e) {
+        console.warn("[Bloom] Mic access denied — recording without mic:", e.name);
+        // Non-fatal: recording continues with screen audio only
+      }
+
+      // 3. Mix screen audio + mic into a single audio track
+      recordAudioCtx  = new AudioContext();
+      const dest      = recordAudioCtx.createMediaStreamDestination();
+
+      const screenAudioTracks = screenStream.getAudioTracks();
+      if (screenAudioTracks.length > 0) {
+        recordAudioCtx
+          .createMediaStreamSource(new MediaStream(screenAudioTracks))
+          .connect(dest);
+      }
+      if (micStream) {
+        const gain = recordAudioCtx.createGain();
+        gain.gain.value = 1;
+        recordAudioCtx.createMediaStreamSource(micStream).connect(gain).connect(dest);
+      }
+
+      // 4. Composed stream: screen video + mixed audio
+      composedStream = new MediaStream([
+        ...screenStream.getVideoTracks(),
+        ...dest.stream.getAudioTracks()
+      ]);
+
+      // If user stops sharing via the browser's own "Stop sharing" button
+      screenStream.getVideoTracks()[0]?.addEventListener("ended", () => {
+        if (mediaRecorder && mediaRecorder.state !== "inactive") stopRecording();
+      }, { once: true });
+
+    } catch (err) {
+      cleanupRecording();
+      if (err.name !== "AbortError" && err.name !== "NotAllowedError") {
+        console.error("[Bloom] Setup error:", err);
+      }
+      showError(
+        err.name === "NotAllowedError" ? "⚠ Permission denied" : "⚠ Screen share cancelled"
+      );
+      return;
+    }
+
+    // 5. Count down, then start MediaRecorder
     runCountdown(() => {
       showRecordingState();
-      chrome.runtime.sendMessage({ type: "START_RECORDING", audioDeviceId: audioSelect.value || null });
+      recordedChunks = [];
+      mediaRecorder  = buildRecorder(composedStream);
+      mediaRecorder.addEventListener("dataavailable", e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      });
+      mediaRecorder.start(1000);
     });
   });
 
-  stopBtn.addEventListener("click", () => {
-    stopBtn.disabled = true;
+  // ── Stop recording ───────────────────────────────────────────────────────────
+  function stopRecording() {
+    if (!mediaRecorder || mediaRecorder.state === "inactive") return;
+    stopBtn.disabled    = true;
     restartBtn.disabled = true;
     stopBtn.textContent = "Stopping…";
-    chrome.runtime.sendMessage({ type: "STOP_RECORDING" });
-  });
 
-  restartBtn.addEventListener("click", () => {
+    mediaRecorder.addEventListener("stop", () => {
+      const blob = new Blob(recordedChunks, { type: mediaRecorder.mimeType || "video/webm" });
+      cleanupRecording();
+      downloadBlob(blob);
+      closeHUD();
+    }, { once: true });
+
+    mediaRecorder.stop();
+  }
+  stopBtn.addEventListener("click", stopRecording);
+
+  // ── Restart recording ────────────────────────────────────────────────────────
+  function restartRecording() {
+    if (!mediaRecorder || mediaRecorder.state === "inactive") return;
     restartBtn.disabled = true;
-    stopBtn.disabled = true;
-    chrome.runtime.sendMessage({ type: "RESTART_RECORDING", audioDeviceId: audioSelect.value || null });
-    showIdleState();
-    requestAnimationFrame(() => startBtn.click());
-  });
+    stopBtn.disabled    = true;
 
-  // ── Messages relayed from background (originally from recorder.js) ─────────
-  chrome.runtime.onMessage.addListener((message) => {
-    if (message.type === "BLOOM_DONE") {
-      stopCamera();
-      wrapper.remove();
-    } else if (message.type === "BLOOM_RECORDING_RESTARTED") {
-      stopBtn.disabled = false;
+    mediaRecorder.addEventListener("stop", () => {
+      recordedChunks = [];
+      mediaRecorder  = buildRecorder(composedStream);
+      mediaRecorder.addEventListener("dataavailable", e => {
+        if (e.data.size > 0) recordedChunks.push(e.data);
+      });
+      mediaRecorder.start(1000);
+      stopBtn.disabled    = false;
       stopBtn.textContent = "■ Stop";
       restartBtn.disabled = false;
-    }
-  });
+    }, { once: true });
 
-  // ── Drag & Resize ─────────────────────────────────────────────────────────
+    mediaRecorder.stop();
+  }
+  restartBtn.addEventListener("click", restartRecording);
+
+  // ── Drag & Resize ────────────────────────────────────────────────────────────
   let dragging  = false;
   let resizing  = false;
   let resizeSx  = 1;
@@ -214,7 +360,6 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
   let startLeft = 0, startTop = 0;
   let startSize = 0;
 
-  // Drag: mousedown anywhere on the camera bubble (not a resize corner)
   cameraContainer.addEventListener("mousedown", (e) => {
     if (e.target.classList.contains("bloom-resize-corner")) return;
     dragging = true;
@@ -227,7 +372,6 @@ if (!document.getElementById("bloom-floating-ui-wrapper")) {
     e.preventDefault();
   });
 
-  // Resize: mousedown on any corner
   resizeCorners.forEach((corner) => {
     corner.addEventListener("mousedown", (e) => {
       resizing    = true;

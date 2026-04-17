@@ -202,6 +202,20 @@
   line-height: 1;
 }
 
+/* ── Error message ───────────────────────────────────────────────────────── */
+#bloom-floating-ui-wrapper .bloom-error-msg {
+  font-size: 12px;
+  font-weight: 600;
+  color: #fca5a5;
+  background: rgba(239, 68, 68, 0.2);
+  border: 1px solid rgba(239, 68, 68, 0.4);
+  border-radius: 99px;
+  padding: 5px 10px;
+  white-space: nowrap;
+  animation: bloom-pulse-in 0.2s ease;
+}
+
 #bloom-floating-ui-wrapper .bloom-hidden {
   display: none !important;
 }
+

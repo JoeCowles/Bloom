@@ -2,9 +2,30 @@
 <html lang="en">
   <head>
     <meta charset="UTF-8" />
+    <title>Bloom – Setting Up</title>
+    <style>
+      * { margin: 0; padding: 0; box-sizing: border-box; }
+      body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        height: 100vh;
+        background: #0f0f13;
+        font-family: system-ui, -apple-system, sans-serif;
+        color: #e2e8f0;
+        text-align: center;
+        gap: 0;
+        flex-direction: column;
+      }
+      .logo { font-size: 48px; margin-bottom: 20px; }
+      h1 { font-size: 22px; font-weight: 700; margin-bottom: 10px; }
+      p  { font-size: 14px; color: #94a3b8; max-width: 320px; line-height: 1.6; }
+    </style>
   </head>
   <body>
-    <!-- Background script handles recording invisibly -->
+    <div class="logo">🌸</div>
+    <h1>Setting up Bloom</h1>
+    <p>Please grant microphone access if prompted — this tab will close automatically once you're ready.</p>
     <script type="module" src="recorder.js"></script>
   </body>
 </html>
